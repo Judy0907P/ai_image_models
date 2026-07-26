@@ -45,13 +45,13 @@ def sample(model, n, img_shape, steps=300, device="cpu", trajectory=False):
     return torch.stack(frames) if trajectory else z
 
 
-def train_classifier(dataset, epochs=5, batch_size=256, lr=1e-3, device=None):
+def train_classifier(dataset, epochs=5, batch_size=256, lr=1e-3, device=None,img_shape=(16, 16, 3),n_classes=5):
     device = device or (
         "cuda" if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
-    model = SpriteClassifier().to(device)
+    model = SpriteClassifier(img_shape=img_shape, n_classes=n_classes).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     bar = trange(epochs)
