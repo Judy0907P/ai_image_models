@@ -2,6 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
+import einops
 
 
 def time_embed(t, dim=128):
@@ -47,3 +48,30 @@ class SpriteClassifier(nn.Module):
     def features(self, x):
         device = next(self.parameters()).device
         return self.body(x.to(device)).cpu()
+
+
+class FlowCNN(nn.Module):
+    def __init__(self, img_shape=(16, 16, 3), t_dim=128, h=128):
+        super().__init__()
+        self.img_shape = img_shape
+        self.t_dim = t_dim
+
+        # Early spatial features from image only (no huge channel concat).
+        self.early = nn.Sequential(
+            nn.Conv2d(3, h, kernel_size=3, stride=1, padding=1), nn.SiLU(),
+            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1), nn.SiLU(),
+        )
+        # Project time embed -> h channels, then add onto feature maps.
+        self.t_proj = nn.Linear(t_dim, h)
+        self.late = nn.Sequential(
+            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1), nn.SiLU(),
+            nn.Conv2d(h, 3, kernel_size=3, stride=1, padding=1), nn.SiLU(),
+        )
+
+    def forward(self, z, t):
+        z = einops.rearrange(z, 'b h w c -> b c h w')
+        h = self.early(z)
+        # Inject time mid-network: broadcast (B, h) -> (B, h, 1, 1) and add.
+        h = h + self.t_proj(time_embed(t, self.t_dim))[:, :, None, None]
+        h = self.late(h)
+        return einops.rearrange(h, 'b c h w -> b h w c')
